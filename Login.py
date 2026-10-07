@@ -6,8 +6,8 @@ import time
 def Login_to(page):
     print("\n>>> NOT LOGGED IN! PROCEEDING TO LOGIN... <<<\n")
 
-    email_to_input = ''  # Enter Email/Phone number here
-    password_to_input = ''  # Enter Your password here
+    email_to_input = '21996963606'  # Enter Email/Phone number here
+    password_to_input = 'Edu86K@88'  # Enter Your password here
 
     # Use locators instead of ElementHandle
     email_input = page.locator('div.m-phone input[name="phone"]')
