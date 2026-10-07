@@ -22,71 +22,90 @@ def login_bingo_em_casa(page):
     Realiza login no Bingo em Casa
     """
     print("\n🔐 Iniciando login no Bingo em Casa...")
-    
+
     try:
         # Aguarda carregamento completo
-        page.wait_for_load_state('networkidle', timeout=15000)
+        page.wait_for_load_state('networkidle', timeout=20000)
         time.sleep(2)
-        
+
         # Campo de EMAIL/CELULAR
         email_input = page.locator('input[id*="identifier"], input[placeholder*="e-mail"], input[placeholder*="celular"]').first
-        
-        if not email_input.is_visible(timeout=5000):
-            print("⚠️ Procurando campo de email com seletores alternativos...")
+        if not email_input.is_visible(timeout=3000):
             email_input = page.locator('input[type="email"], input[type="text"]').nth(0)
-        
-        email_input.scroll_into_view_if_needed()
-        email_input.click()
-        time.sleep(0.5)
-        email_input.fill(CREDENTIALS['email'])
-        print(f"✅ Email/Celular inserido: {CREDENTIALS['email']}")
-        
+
+        if email_input.is_visible(timeout=3000):
+            email_input.scroll_into_view_if_needed()
+            email_input.click()
+            time.sleep(0.5)
+            email_input.fill(CREDENTIALS['email'])
+            print(f"✅ Email/Celular inserido: {CREDENTIALS['email']}")
+        else:
+            print("⚠️ Campo de email não visível. Tentando continuar...")
+
         # Campo de SENHA
         password_input = page.locator('input[type="password"]').first
-        password_input.scroll_into_view_if_needed()
-        password_input.click()
-        time.sleep(0.5)
-        password_input.fill(CREDENTIALS['password'])
-        print(f"✅ Senha inserida")
-        
-        # Botão ENTRAR
-        login_buttons = [
-            page.locator('button:has-text("Entrar")').first,
-            page.locator('button[type="submit"]').first,
-            page.locator('button[class*="login"]').first,
-        ]
-        
-        login_button = None
-        for btn in login_buttons:
-            try:
-                if btn.is_visible(timeout=2000):
-                    login_button = btn
-                    break
-            except:
-                continue
-        
-        if login_button:
-            login_button.scroll_into_view_if_needed()
+        if password_input.is_visible(timeout=3000):
+            password_input.scroll_into_view_if_needed()
+            password_input.click()
             time.sleep(0.5)
-            login_button.click()
-            print("✅ Botão Entrar clicado")
+            password_input.fill(CREDENTIALS['password'])
+            print("✅ Senha inserida")
         else:
-            print("⚠️ Botão de login não encontrado")
-            return False
-        
-        # Aguarda após login
+            print("⚠️ Campo de senha não visível")
+
+        # Botão ENTRAR
+        candidates = [
+            'button:has-text("Entrar")',
+            'button:has-text("Log in")',
+            'button[type="submit"]',
+            'button[class*="login"]',
+            'button[class*="primary"]',
+        ]
+
+        clicked = False
+        for selector in candidates:
+            try:
+                btn = page.locator(selector).first
+                if btn.is_visible(timeout=2000):
+                    print(f"✅ Botão encontrado com seletor: {selector}")
+                    try:
+                        btn.click(force=True, timeout=15000)
+                    except:
+                        btn.evaluate("el => el.click()")
+                    clicked = True
+                    break
+            except Exception:
+                pass
+
+        if not clicked:
+            print("⚠️ Nenhum botão de login clicável encontrado.")
+            print("ℹ️ Pode ser que o login já esteja aberto no modal. Tente concluir manualmente.")
+            input("🔴 PRESSIONE ENTER APÓS FAZER LOGIN MANUALMENTE...")
+            return True
+
         time.sleep(3)
-        page.wait_for_load_state('networkidle', timeout=15000)
-        
+        page.wait_for_load_state('networkidle', timeout=20000)
+
+        # Se o modal ainda estiver ativo, tenta fechar
+        for selector in ['button[aria-label="Close"], button:has-text("Fechar"), [data-dismiss="modal"], [class*="close"]']:
+            try:
+                close_btn = page.locator(selector).first
+                if close_btn.is_visible(timeout=2000):
+                    close_btn.click(force=True, timeout=5000)
+                    break
+            except Exception:
+                pass
+
+        # Verifica login
         try:
-            page.wait_for_selector('[class*="sport"], [class*="competition"], section', timeout=5000)
+            page.wait_for_selector('[class*="sport"], [class*="competition"], [class*="match"], section', timeout=10000)
             print("\n✅ >>> LOGIN REALIZADO COM SUCESSO! <<<\n")
             return True
-        except:
-            print("\n⚠️ Login pode ter falhado. Verifique manualmente...")
+        except Exception:
+            print("\n⚠️ Login pode ter falhado; tentando continuar manualmente...")
             input("🔴 PRESSIONE ENTER APÓS CONFIRMAR QUE O LOGIN FUNCIONOU...")
             return True
-    
+
     except Exception as e:
         print(f"\n❌ ERRO NO LOGIN: {e}")
         print("⚠️ Tentando modo manual...")
@@ -104,80 +123,119 @@ def inspect_games_test_mode(page):
     print("\n" + "="*70)
     print("🧪 MODO TESTE - INSPEÇÃO DE JOGOS")
     print("="*70 + "\n")
-    
+
     running = True
     page_num = 1
     total_games = 0
-    
+
     while running:
         try:
             print(f"\n📄 Página {page_num}:")
             print("-" * 70)
-            
+
             time.sleep(2)
-            
-            # Procura por elementos de jogos
-            matches = page.locator('[class*="match"], [class*="event"], [class*="game"], [class*="aposta"]')
-            match_num = matches.count()
-            
-            if match_num == 0:
-                print("⏳ Nenhum jogo encontrado. Aguardando...")
+
+            # Seletor mais amplo para não depender de uma estrutura rígida
+            selectors = [
+                '[class*="match"]',
+                '[class*="event"]',
+                '[class*="fixture"]',
+                '[class*="offer"]',
+                '[class*="game"]',
+                'article',
+                'li',
+                'div'
+            ]
+
+            candidates = []
+            for selector in selectors:
+                try:
+                    loc = page.locator(selector)
+                    if loc.count() > 0:
+                        candidates.append(loc)
+                except Exception:
+                    pass
+
+            if not candidates:
+                print("⏳ Nenhum candidato de jogo encontrado.")
                 time.sleep(3)
                 continue
-            
-            print(f"✅ Encontrados {match_num} jogos\n")
-            
-            for i in range(min(match_num, 5)):  # Mostra até 5 jogos por página
+
+            found = []
+            for loc in candidates:
                 try:
-                    match_element = matches.nth(i)
-                    match_element.scroll_into_view_if_needed()
-                    time.sleep(0.5)
-                    
-                    match_text = match_element.text_content()
-                    # Limpa e formata o texto
-                    clean_text = ' '.join(match_text.split())[:150]
-                    
-                    print(f"🎮 Jogo {total_games + i + 1}:")
-                    print(f"   {clean_text}...")
-                    
-                    # Tira screenshot do jogo
-                    try:
-                        match_element.screenshot(path=f"game_{total_games + i + 1}.png")
-                        print(f"   📸 Screenshot salvo: game_{total_games + i + 1}.png")
-                    except:
-                        pass
-                    
-                    print()
-                
-                except Exception as e:
-                    print(f"❌ Erro ao inspecionar jogo: {e}\n")
+                    count = loc.count()
+                    for i in range(min(count, 25)):
+                        el = loc.nth(i)
+                        try:
+                            text = el.text_content(timeout=2000)
+                        except Exception:
+                            continue
+                        if not text:
+                            continue
+                        clean = ' '.join(text.split())
+                        if len(clean) < 8:
+                            continue
+                        if any(token in clean.lower() for token in ['vs', 'x', ':', 'h2h', 'live']):
+                            found.append(clean[:200])
+                except Exception:
                     continue
-            
-            total_games += min(match_num, 5)
-            
+
+            # remove duplicados
+            uniq = []
+            for item in found:
+                if item not in uniq:
+                    uniq.append(item)
+
+            if not uniq:
+                print("⏳ Nenhum jogo com conteúdo útil encontrado.")
+                time.sleep(3)
+                continue
+
+            print(f"✅ Encontrados {len(uniq)} blocos relevantes\n")
+
+            for idx, item in enumerate(uniq[:5], start=1):
+                print(f"🎮 Bloco {idx}:")
+                print(f"   {item}")
+                print()
+
+            total_games += len(uniq[:5])
+
             # Tenta ir para próxima página
             print("\n⏳ Procurando botão de próxima página...")
-            try:
-                next_button = page.locator('button:has-text("Próximo"), a[class*="next"], button[class*="next"]').first
-                if next_button.is_visible(timeout=2000) and next_button.is_enabled():
-                    next_button.click()
-                    print("✅ Próxima página clicada\n")
-                    page_num += 1
-                    time.sleep(2)
-                else:
-                    print("✅ Última página alcançada")
-                    running = False
-            except:
+            next_candidates = [
+                'button:has-text("Próximo")',
+                'button:has-text("Next")',
+                'a:has-text("Próximo")',
+                'a[class*="next"]',
+                'button[class*="next"]'
+            ]
+
+            next_found = False
+            for selector in next_candidates:
+                try:
+                    nxt = page.locator(selector).first
+                    if nxt.is_visible(timeout=2000):
+                        nxt.click(force=True, timeout=5000)
+                        next_found = True
+                        print("✅ Próxima página clicada\n")
+                        page_num += 1
+                        time.sleep(2)
+                        break
+                except Exception:
+                    pass
+
+            if not next_found:
                 print("✅ Última página alcançada")
                 running = False
-        
+
         except Exception as e:
             print(f"❌ Erro: {e}")
             running = False
-    
+
     print("\n" + "="*70)
     print(f"✅ INSPEÇÃO CONCLUÍDA")
-    print(f"📊 Total de jogos encontrados: {total_games}")
+    print(f"📊 Total de blocos relevantes encontrados: {total_games}")
     print("="*70 + "\n")
 
 
@@ -213,30 +271,31 @@ def main_test_mode():
         )
 
         page = context.new_page()
-    
+
         try:
             print(f'🌐 Acessando {BASE_URL}')
             page.goto(url=BASE_URL, timeout=50000, wait_until="networkidle")
-            
+            page.screenshot(path='bingo_home_debug.png')
+
             # Login
             if not login_bingo_em_casa(page):
                 print("❌ Login falhou")
                 return
-            
+
             # Modo teste: inspeciona jogos
             inspect_games_test_mode(page)
-            
+
             print("\n✅ Teste concluído!")
             print("📝 Próximos passos:")
             print("   1. Verifique os screenshots dos jogos gerados")
             print("   2. Rode os scrapers para gerar CSVs de previsão")
             print("   3. Execute o bot final: python BingoEmCasa_Bot_Final.py")
-            
+
             input("\n🔴 PRESSIONE ENTER PARA SAIR...")
-        
+
         except Exception as e:
             print(f"❌ Erro fatal: {e}")
-        
+
         finally:
             browser.close()
 
@@ -256,5 +315,5 @@ if __name__ == "__main__":
     print("   ❌ Não coloca apostas (apenas visualiza)")
     print("\n⚠️  Após este teste, você precisa rodar os scrapers")
     print("   para gerar os CSVs de previsão\n")
-    
+
     main_test_mode()
