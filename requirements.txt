@@ -4,3 +4,5 @@ requests
 beautifulsoup4
 lxml
 playwright
+python-telegram-bot>=20.0
+python-dotenv>=1.0.0
